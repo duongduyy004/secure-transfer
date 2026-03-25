@@ -1,6 +1,6 @@
 const path = require('path');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 const FILE_TTL_MS = 24 * 60 * 60 * 1000;
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
