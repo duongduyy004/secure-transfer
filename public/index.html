@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Secure Transfer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+        integrity="sha512-CNgIRecGoMByw6zjY4J+6AL7XqQfAQxPwxPEQ8xg4IN7Yx3+b4rEOcC+K6fA7fAqD5M6xQ9P5M4z6fR6xAr8Nw=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+    <main class="shell">
+        <section class="card">
+            <div class="tag" id="modeTag">Sender Mode</div>
+            <h1 class="headline" id="title">Secure AES File Transfer</h1>
+            <p class="sub" id="subtitle">Encrypt in your browser, upload ciphertext, and share a temporary link.</p>
+
+            <section id="senderPanel" class="panel active">
+                <label class="dropzone" id="dropzone" for="fileInput">
+                    <input type="file" id="fileInput" class="sr-only" />
+                    <strong id="dropzoneTitle">Drop file here</strong> or click to choose<br />
+                    <span id="dropzoneMeta" class="muted">Max encrypted upload size: 100MB</span>
+                </label>
+
+                <div class="field">
+                    <label for="senderPassword">Encryption password</label>
+                    <input id="senderPassword" type="password" autocomplete="new-password"
+                        placeholder="Enter a strong password" />
+                    <div id="strength" class="strength muted">Password strength: -</div>
+                </div>
+
+                <div class="row">
+                    <button id="encryptUploadBtn" disabled>Encrypt &amp; Upload</button>
+                </div>
+
+                <div class="bar-wrap">
+                    <div id="uploadBar" class="bar"></div>
+                </div>
+                <div id="uploadStatus" class="status"></div>
+
+                <div id="shareArea" style="display:none; margin-top: 12px;">
+                    <label>Share link</label>
+                    <div id="shareLink" class="linkbox"></div>
+                    <div class="row" style="margin-top: 10px;">
+                        <button id="copyBtn" class="secondary">Copy Link</button>
+                        <span id="expiryTimer" class="muted"></span>
+                    </div>
+                    <div id="qr"></div>
+                </div>
+            </section>
+
+            <section id="receiverPanel" class="panel">
+                <div class="meta-grid">
+                    <div>Share ID</div>
+                    <div id="rxShareId">-</div>
+                    <div>Filename</div>
+                    <div id="rxFilename">-</div>
+                    <div>Size</div>
+                    <div id="rxFilesize">-</div>
+                    <div>Expires</div>
+                    <div id="rxExpiry">-</div>
+                </div>
+
+                <div class="field">
+                    <label for="receiverPassword">Password</label>
+                    <input id="receiverPassword" type="password" autocomplete="current-password"
+                        placeholder="Enter sender password" />
+                </div>
+
+                <button id="downloadDecryptBtn">Download &amp; Decrypt</button>
+                <div class="bar-wrap">
+                    <div id="downloadBar" class="bar"></div>
+                </div>
+                <div id="downloadStatus" class="status"></div>
+            </section>
+        </section>
+
+        <aside class="aside">
+            <section class="card">
+                <h2 style="margin-top:0;">How it stays private</h2>
+                <p class="sub" style="margin-bottom: 0;">
+                    Password never leaves your browser. The server only stores opaque encrypted blobs and auto-deletes
+                    them after 24 hours.
+                </p>
+            </section>
+            <section class="card">
+                <h2 style="margin-top:0;">Encryption format</h2>
+                <p class="sub" style="margin:0; font-family: var(--mono);">
+                    [4b magic][16b salt][12b iv][ciphertext+tag]<br />
+                    PBKDF2(SHA-256, 310000) -> AES-256-GCM
+                </p>
+            </section>
+        </aside>
+    </main>
+    <script src="/app.js" defer></script>
+</body>
+
+</html>
