@@ -1,0 +1,20 @@
+services:
+  secure-transfer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: secure-transfer:prod
+    container_name: secure-transfer
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      CLEANUP_TOKEN: ${CLEANUP_TOKEN:-}
+    volumes:
+      - uploads_data:/app/uploads
+    restart: unless-stopped
+
+volumes:
+  uploads_data:
+    driver: local
