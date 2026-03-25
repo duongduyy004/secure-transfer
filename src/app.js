@@ -15,6 +15,12 @@ function createApp() {
 
     app.use('/api', apiRouter);
 
+    app.get('/qrcode', (req, res) => {
+        const query = new URLSearchParams(req.query || {}).toString();
+        const suffix = query ? `?${query}` : '';
+        res.redirect(307, `/api/qrcode${suffix}`);
+    });
+
     app.get(['/', '/receive/:shareId'], (_req, res) => {
         res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
     });

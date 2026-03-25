@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const QRCode = require('qrcode');
 const { FILE_TTL_MS } = require('../config/constants');
 const { upload, uploadLimiter } = require('../middleware/upload');
 const {
@@ -130,6 +131,28 @@ router.delete('/cleanup', async (req, res) => {
     } catch (err) {
         console.error('Cleanup error:', err);
         return res.status(500).json({ error: 'Cleanup failed.' });
+    }
+});
+
+router.get('/qrcode', async (req, res) => {
+    try {
+        const text = String(req.query.text || '').trim();
+        if (!text) {
+            return res.status(400).json({ error: 'Missing query param: text' });
+        }
+
+        const svg = await QRCode.toString(text, {
+            type: 'svg',
+            width: 256,
+            margin: 1,
+            errorCorrectionLevel: 'M'
+        });
+
+        res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+        return res.status(200).send(svg);
+    } catch (err) {
+        console.error('QR code error:', err);
+        return res.status(500).json({ error: 'Failed to generate QR code.' });
     }
 });
 
