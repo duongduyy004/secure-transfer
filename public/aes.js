@@ -313,47 +313,6 @@ function deriveKey(password, salt, length) {
     return key;
 }
 
-function bytesToHex(bytes) {
-    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function hexToBytes(hex) {
-    const out = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < out.length; i++) {
-        out[i] = parseInt(hex.substr(i * 2, 2), 16);
-    }
-    return out;
-}
-
-function base64Encode(bytes) {
-    let bin = '';
-    for (let i = 0; i < bytes.length; i++) {
-        bin += String.fromCharCode(bytes[i]);
-    }
-    if (typeof btoa === 'function') {
-        return btoa(bin);
-    }
-    if (typeof Buffer !== 'undefined') {
-        return Buffer.from(bytes).toString('base64');
-    }
-    throw new Error('No base64 encoder available');
-}
-
-function base64Decode(str) {
-    if (typeof atob === 'function') {
-        const bin = atob(str);
-        const out = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) {
-            out[i] = bin.charCodeAt(i);
-        }
-        return out;
-    }
-    if (typeof Buffer !== 'undefined') {
-        return new Uint8Array(Buffer.from(str, 'base64'));
-    }
-    throw new Error('No base64 decoder available');
-}
-
 // ============================================================
 // 8. High-level File API
 // ============================================================
@@ -399,10 +358,6 @@ const SimpleAES = {
     deriveKey,
     encryptBytes,
     decryptBytes,
-    hexToBytes,
-    bytesToHex,
-    base64Encode,
-    base64Decode,
     toBytes,
     fromBytes
 };
