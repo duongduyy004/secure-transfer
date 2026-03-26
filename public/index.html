@@ -5,7 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Secure Transfer</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="/styles.css" />
 </head>
 
 <body>
@@ -16,8 +16,8 @@
             <p class="sub" id="subtitle">Encrypt in your browser, upload ciphertext, and share a temporary link.</p>
 
             <section id="senderPanel" class="panel active">
+                <input type="file" id="fileInput" style="display: none;" />
                 <label class="dropzone" id="dropzone" for="fileInput">
-                    <input type="file" id="fileInput" class="sr-only" />
                     <strong id="dropzoneTitle">Drop file here</strong> or click to choose<br />
                     <span id="dropzoneMeta" class="muted">Max encrypted upload size: 100MB</span>
                 </label>
@@ -86,13 +86,14 @@
             <section class="card">
                 <h2 style="margin-top:0;">Encryption format</h2>
                 <p class="sub" style="margin:0; font-family: var(--mono);">
-                    [4b magic][16b salt][12b iv][ciphertext+tag]<br />
-                    PBKDF2(SHA-256, 310000) -> AES-256-GCM
+                    [4b magic][1b key-size marker][16b salt][16b iv][ciphertext]<br />
+                    Custom KDF -> AES-CBC + PKCS#7
                 </p>
             </section>
         </aside>
     </main>
-    <script src="app.js" defer></script>
+    <script src="/aes.js"></script>
+    <script src="/app.js" defer></script>
 </body>
 
 </html>

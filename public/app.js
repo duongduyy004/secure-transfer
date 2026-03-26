@@ -1,8 +1,3 @@
-const MAGIC = new TextEncoder().encode('AES1');
-const SALT_BYTES = 16;
-const IV_BYTES = 12;
-const PBKDF2_ITERATIONS = 310000;
-
 const senderPanel = document.getElementById('senderPanel');
 const receiverPanel = document.getElementById('receiverPanel');
 const modeTag = document.getElementById('modeTag');
@@ -77,77 +72,49 @@ function updateSenderReady() {
     encryptUploadBtn.disabled = !(selectedFile && senderPassword.value.length > 0);
 }
 
-async function deriveAesKey(password, salt, usage) {
-    const passKey = await crypto.subtle.importKey(
-        'raw',
-        new TextEncoder().encode(password),
-        'PBKDF2',
-        false,
-        ['deriveKey']
-    );
+function ensureAesLoaded() {
+    if (window.SimpleAES) {
+        return Promise.resolve(window.SimpleAES);
+    }
 
-    return crypto.subtle.deriveKey(
-        {
-            name: 'PBKDF2',
-            salt,
-            iterations: PBKDF2_ITERATIONS,
-            hash: 'SHA-256'
-        },
-        passKey,
-        { name: 'AES-GCM', length: 256 },
-        false,
-        [usage]
-    );
+    return new Promise((resolve, reject) => {
+        const existing = document.querySelector('script[data-aes-loader="1"]');
+        if (existing) {
+            existing.addEventListener('load', () => resolve(window.SimpleAES));
+            existing.addEventListener('error', () => reject(new Error('AES engine was not loaded.')));
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = '/aes.js';
+        script.async = true;
+        script.dataset.aesLoader = '1';
+        script.onload = () => {
+            if (window.SimpleAES) {
+                resolve(window.SimpleAES);
+            } else {
+                reject(new Error('AES engine was not loaded.'));
+            }
+        };
+        script.onerror = () => reject(new Error('AES engine was not loaded.'));
+        document.head.appendChild(script);
+    });
+}
+
+async function deriveAesKey(password, salt, usage) {
+    return ensureAesLoaded();
 }
 
 async function encryptFile(file, password) {
     const plain = new Uint8Array(await file.arrayBuffer());
-    const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
-    const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
-    const key = await deriveAesKey(password, salt, 'encrypt');
-
-    const cipherBuf = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv },
-        key,
-        plain
-    );
-
-    const cipher = new Uint8Array(cipherBuf);
-    const out = new Uint8Array(MAGIC.length + SALT_BYTES + IV_BYTES + cipher.length);
-    out.set(MAGIC, 0);
-    out.set(salt, MAGIC.length);
-    out.set(iv, MAGIC.length + SALT_BYTES);
-    out.set(cipher, MAGIC.length + SALT_BYTES + IV_BYTES);
-    return out;
+    const aes = await deriveAesKey();
+    return aes.encryptBytes(plain, password, 256);
 }
 
 async function decryptFile(encBuffer, password) {
-    const data = new Uint8Array(encBuffer);
-    const minLength = MAGIC.length + SALT_BYTES + IV_BYTES + 16;
-    if (data.length < minLength) {
-        throw new Error('Invalid encrypted payload.');
-    }
-
-    const magic = data.slice(0, MAGIC.length);
-    if (!magic.every((v, i) => v === MAGIC[i])) {
-        throw new Error('Invalid file magic. Unsupported or corrupted file.');
-    }
-
-    const saltStart = MAGIC.length;
-    const ivStart = saltStart + SALT_BYTES;
-    const cipherStart = ivStart + IV_BYTES;
-    const salt = data.slice(saltStart, ivStart);
-    const iv = data.slice(ivStart, cipherStart);
-    const cipher = data.slice(cipherStart);
-
-    const key = await deriveAesKey(password, salt, 'decrypt');
+    const aes = await deriveAesKey();
     try {
-        const plainBuf = await crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv },
-            key,
-            cipher
-        );
-        return new Uint8Array(plainBuf);
+        return aes.decryptBytes(new Uint8Array(encBuffer), password);
     } catch {
         throw new Error('Wrong password or tampered file.');
     }
@@ -265,6 +232,18 @@ function triggerDownload(bytes, filename) {
     URL.revokeObjectURL(url);
 }
 
+function readOriginalNameFromHeaders(headers) {
+    const raw = headers.get('x-original-name-encoded') || headers.get('x-original-name');
+    if (raw) {
+        try {
+            return decodeURIComponent(raw);
+        } catch {
+            return raw;
+        }
+    }
+    return 'download.bin';
+}
+
 async function renderQr(link) {
     qr.classList.remove('muted');
     qr.textContent = 'Generating QR...';
@@ -333,7 +312,7 @@ async function initReceiverMode(shareId) {
         if (!headResp.ok) {
             throw new Error('Link expired or not found.');
         }
-        const name = headResp.headers.get('x-original-name') || 'download.bin';
+        const name = readOriginalNameFromHeaders(headResp.headers);
         const size = Number(headResp.headers.get('x-file-size') || 0);
         const exp = headResp.headers.get('x-expires-at');
 
@@ -361,6 +340,10 @@ function initSenderMode() {
 fileInput.addEventListener('change', () => {
     setSelectedFile(fileInput.files[0] || null);
 });
+dropzone.addEventListener('click', () => {
+    fileInput.click();
+});
+
 
 ['dragenter', 'dragover'].forEach((evt) => {
     dropzone.addEventListener(evt, (e) => {
@@ -470,7 +453,7 @@ downloadDecryptBtn.addEventListener('click', async () => {
 
         setStatus(downloadStatus, 'Decrypting in browser...', '');
         const plain = await decryptFile(data, password);
-        const filename = receiverMeta?.originalName || headers.get('x-original-name') || 'download.bin';
+        const filename = receiverMeta?.originalName || readOriginalNameFromHeaders(headers);
         triggerDownload(plain, filename);
         setStatus(downloadStatus, 'Download ready and decrypted.', 'ok');
     } catch (err) {

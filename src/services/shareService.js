@@ -118,10 +118,15 @@ async function resolveActiveShare(shareId) {
 }
 
 function setDownloadHeaders(res, shareId, meta, stat) {
+    const originalName = String(meta.originalName || 'download.bin');
+    const encodedOriginalName = encodeURIComponent(originalName);
+
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Length', stat.size);
     res.setHeader('Content-Disposition', `attachment; filename="${shareId}.enc"`);
-    res.setHeader('X-Original-Name', meta.originalName || 'download.bin');
+    // Header values must be ASCII-safe in Node; use percent-encoding for transport.
+    res.setHeader('X-Original-Name', encodedOriginalName);
+    res.setHeader('X-Original-Name-Encoded', encodedOriginalName);
     res.setHeader('X-File-Size', String(meta.fileSize || 0));
     res.setHeader('X-Expires-At', meta.expiresAt);
 }
