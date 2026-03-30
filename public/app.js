@@ -340,10 +340,6 @@ function initSenderMode() {
 fileInput.addEventListener('change', () => {
     setSelectedFile(fileInput.files[0] || null);
 });
-dropzone.addEventListener('click', () => {
-    fileInput.click();
-});
-
 
 ['dragenter', 'dragover'].forEach((evt) => {
     dropzone.addEventListener(evt, (e) => {
