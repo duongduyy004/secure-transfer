@@ -278,6 +278,10 @@ async function uploadEncrypted(encArray, meta) {
             if (xhr.status >= 200 && xhr.status < 300) {
                 resolve(xhr.response);
             } else {
+                if (xhr.status === 413) {
+                    reject(new Error('Upload rejected (413). Request body is too large for the current server/proxy limit.'));
+                    return;
+                }
                 reject(new Error(xhr.response?.error || `Upload failed (${xhr.status})`));
             }
         };
