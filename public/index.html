@@ -23,6 +23,15 @@
                 </label>
 
                 <div class="field">
+                    <label for="senderCipherType">Encryption type</label>
+                    <select id="senderCipherType">
+                        <option value="AES-128">AES-128</option>
+                        <option value="AES-192">AES-192</option>
+                        <option value="AES-256" selected>AES-256</option>
+                    </select>
+                </div>
+
+                <div class="field">
                     <label for="senderPassword">Encryption password</label>
                     <input id="senderPassword" type="password" autocomplete="new-password"
                         placeholder="Enter a strong password" />
@@ -57,8 +66,19 @@
                     <div id="rxFilename">-</div>
                     <div>Size</div>
                     <div id="rxFilesize">-</div>
+                    <div>Encrypted As</div>
+                    <div id="rxCipherType">-</div>
                     <div>Expires</div>
                     <div id="rxExpiry">-</div>
+                </div>
+
+                <div class="field">
+                    <label for="receiverCipherType">Encryption type</label>
+                    <select id="receiverCipherType">
+                        <option value="AES-128">AES-128</option>
+                        <option value="AES-192">AES-192</option>
+                        <option value="AES-256" selected>AES-256</option>
+                    </select>
                 </div>
 
                 <div class="field">
@@ -86,13 +106,12 @@
             <section class="card">
                 <h2 style="margin-top:0;">Encryption format</h2>
                 <p class="sub" style="margin:0; font-family: var(--mono);">
-                    [4b magic][1b key-size marker][16b salt][16b iv][ciphertext]<br />
-                    Custom KDF -> AES-CBC + PKCS#7
+                    [4b magic][1b cipher marker][16b salt][12b iv][ciphertext+tag]<br />
+                    PBKDF2-SHA256 -> AES-GCM (128/192/256)
                 </p>
             </section>
         </aside>
     </main>
-    <script src="/aes.js"></script>
     <script src="/app.js" defer></script>
 </body>
 

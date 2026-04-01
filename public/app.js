@@ -8,6 +8,7 @@ const fileInput = document.getElementById('fileInput');
 const dropzone = document.getElementById('dropzone');
 const dropzoneTitle = document.getElementById('dropzoneTitle');
 const dropzoneMeta = document.getElementById('dropzoneMeta');
+const senderCipherType = document.getElementById('senderCipherType');
 const senderPassword = document.getElementById('senderPassword');
 const strengthEl = document.getElementById('strength');
 const encryptUploadBtn = document.getElementById('encryptUploadBtn');
@@ -22,11 +23,31 @@ const expiryTimer = document.getElementById('expiryTimer');
 const rxShareId = document.getElementById('rxShareId');
 const rxFilename = document.getElementById('rxFilename');
 const rxFilesize = document.getElementById('rxFilesize');
+const rxCipherType = document.getElementById('rxCipherType');
 const rxExpiry = document.getElementById('rxExpiry');
+const receiverCipherType = document.getElementById('receiverCipherType');
 const receiverPassword = document.getElementById('receiverPassword');
 const downloadDecryptBtn = document.getElementById('downloadDecryptBtn');
 const downloadBar = document.getElementById('downloadBar');
 const downloadStatus = document.getElementById('downloadStatus');
+
+const MAGIC = new Uint8Array([0x53, 0x54, 0x52, 0x32]); // STR2
+const SALT_SIZE = 16;
+const IV_SIZE = 12;
+const PBKDF2_ITERATIONS = 210000;
+const GENERIC_DECRYPT_ERROR = 'Unable to decrypt file. Check encryption type and password.';
+
+const CIPHER_CONFIGS = {
+    'AES-128': { bits: 128, code: 1 },
+    'AES-192': { bits: 192, code: 2 },
+    'AES-256': { bits: 256, code: 3 }
+};
+
+const CIPHER_BY_CODE = {
+    1: 'AES-128',
+    2: 'AES-192',
+    3: 'AES-256'
+};
 
 let selectedFile = null;
 let currentExpiryInterval = null;
@@ -72,51 +93,133 @@ function updateSenderReady() {
     encryptUploadBtn.disabled = !(selectedFile && senderPassword.value.length > 0);
 }
 
-function ensureAesLoaded() {
-    if (window.SimpleAES) {
-        return Promise.resolve(window.SimpleAES);
+function ensureCryptoSupport() {
+    if (!(window.crypto && window.crypto.subtle)) {
+        throw new Error('Web Crypto API is not available in this browser.');
+    }
+}
+
+function getCipherConfig(cipherType) {
+    const cfg = CIPHER_CONFIGS[cipherType];
+    if (!cfg) {
+        throw new Error(`Unsupported encryption type: ${cipherType}`);
+    }
+    return cfg;
+}
+
+function getCipherTypeByCode(code) {
+    return CIPHER_BY_CODE[code] || null;
+}
+
+function concatBytes(parts) {
+    const total = parts.reduce((sum, part) => sum + part.length, 0);
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) {
+        merged.set(part, offset);
+        offset += part.length;
+    }
+    return merged;
+}
+
+function readCipherTypeFromPayload(bytes) {
+    if (!(bytes instanceof Uint8Array) || bytes.length < MAGIC.length + 1 + SALT_SIZE + IV_SIZE + 1) {
+        throw new Error(GENERIC_DECRYPT_ERROR);
     }
 
-    return new Promise((resolve, reject) => {
-        const existing = document.querySelector('script[data-aes-loader="1"]');
-        if (existing) {
-            existing.addEventListener('load', () => resolve(window.SimpleAES));
-            existing.addEventListener('error', () => reject(new Error('AES engine was not loaded.')));
-            return;
+    for (let i = 0; i < MAGIC.length; i += 1) {
+        if (bytes[i] !== MAGIC[i]) {
+            throw new Error(GENERIC_DECRYPT_ERROR);
         }
+    }
 
-        const script = document.createElement('script');
-        script.src = '/aes.js';
-        script.async = true;
-        script.dataset.aesLoader = '1';
-        script.onload = () => {
-            if (window.SimpleAES) {
-                resolve(window.SimpleAES);
-            } else {
-                reject(new Error('AES engine was not loaded.'));
-            }
-        };
-        script.onerror = () => reject(new Error('AES engine was not loaded.'));
-        document.head.appendChild(script);
-    });
+    const cipherType = getCipherTypeByCode(bytes[MAGIC.length]);
+    if (!cipherType) {
+        throw new Error(GENERIC_DECRYPT_ERROR);
+    }
+    return cipherType;
 }
 
-async function deriveAesKey(password, salt, usage) {
-    return ensureAesLoaded();
+async function deriveAesKey(password, salt, bits, usage) {
+    const baseKey = await window.crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(password),
+        'PBKDF2',
+        false,
+        ['deriveKey']
+    );
+
+    return window.crypto.subtle.deriveKey(
+        {
+            name: 'PBKDF2',
+            salt,
+            iterations: PBKDF2_ITERATIONS,
+            hash: 'SHA-256'
+        },
+        baseKey,
+        {
+            name: 'AES-GCM',
+            length: bits
+        },
+        false,
+        [usage]
+    );
 }
 
-async function encryptFile(file, password) {
+async function encryptFile(file, password, cipherType) {
+    ensureCryptoSupport();
+    const { bits, code } = getCipherConfig(cipherType);
+
     const plain = new Uint8Array(await file.arrayBuffer());
-    const aes = await deriveAesKey();
-    return aes.encryptBytes(plain, password, 256);
+    const salt = window.crypto.getRandomValues(new Uint8Array(SALT_SIZE));
+    const iv = window.crypto.getRandomValues(new Uint8Array(IV_SIZE));
+    const key = await deriveAesKey(password, salt, bits, 'encrypt');
+
+    const cipherBuffer = await window.crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        plain
+    );
+
+    return concatBytes([
+        MAGIC,
+        new Uint8Array([code]),
+        salt,
+        iv,
+        new Uint8Array(cipherBuffer)
+    ]);
 }
 
-async function decryptFile(encBuffer, password) {
-    const aes = await deriveAesKey();
+async function decryptFile(encBuffer, password, selectedCipherType) {
+    ensureCryptoSupport();
+
+    const bytes = new Uint8Array(encBuffer);
+    const payloadCipherType = readCipherTypeFromPayload(bytes);
+
+    if (payloadCipherType !== selectedCipherType) {
+        throw new Error(GENERIC_DECRYPT_ERROR);
+    }
+
+    const { bits } = getCipherConfig(selectedCipherType);
+    const offsetCipherCode = MAGIC.length;
+    const offsetSalt = offsetCipherCode + 1;
+    const offsetIv = offsetSalt + SALT_SIZE;
+    const offsetCiphertext = offsetIv + IV_SIZE;
+
+    const salt = bytes.slice(offsetSalt, offsetIv);
+    const iv = bytes.slice(offsetIv, offsetCiphertext);
+    const ciphertext = bytes.slice(offsetCiphertext);
+
     try {
-        return aes.decryptBytes(new Uint8Array(encBuffer), password);
+        const key = await deriveAesKey(password, salt, bits, 'decrypt');
+        const plainBuffer = await window.crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv },
+            key,
+            ciphertext
+        );
+        return new Uint8Array(plainBuffer);
     } catch {
-        throw new Error('Wrong password or tampered file.');
+        throw new Error(GENERIC_DECRYPT_ERROR);
     }
 }
 
@@ -244,6 +347,11 @@ function readOriginalNameFromHeaders(headers) {
     return 'download.bin';
 }
 
+function readCipherTypeFromHeaders(headers) {
+    const raw = headers.get('x-cipher-type');
+    return CIPHER_CONFIGS[raw] ? raw : null;
+}
+
 async function renderQr(link) {
     qr.classList.remove('muted');
     qr.textContent = 'Generating QR...';
@@ -302,12 +410,11 @@ async function initReceiverMode(shareId) {
     receiverPanel.classList.add('active');
     modeTag.textContent = 'Receiver Mode';
     title.textContent = 'Decrypt Shared File';
-    subtitle.textContent = 'Enter the password used by the sender to decrypt locally in your browser.';
+    subtitle.textContent = 'Choose encryption type and enter password to decrypt locally in your browser.';
 
     rxShareId.textContent = shareId;
 
     try {
-        // Use HEAD to fetch metadata without downloading encrypted bytes.
         const headResp = await fetch(`/api/download/${encodeURIComponent(shareId)}`, { method: 'HEAD' });
         if (!headResp.ok) {
             throw new Error('Link expired or not found.');
@@ -315,15 +422,22 @@ async function initReceiverMode(shareId) {
         const name = readOriginalNameFromHeaders(headResp.headers);
         const size = Number(headResp.headers.get('x-file-size') || 0);
         const exp = headResp.headers.get('x-expires-at');
+        const cipherType = readCipherTypeFromHeaders(headResp.headers);
 
-        receiverMeta = { originalName: name, fileSize: size, expiresAt: exp };
+        if (cipherType) {
+            receiverCipherType.value = cipherType;
+        }
+
+        receiverMeta = { originalName: name, fileSize: size, expiresAt: exp, cipherType };
         rxFilename.textContent = name;
         rxFilesize.textContent = formatBytes(size);
+        rxCipherType.textContent = cipherType || '-';
         rxExpiry.textContent = exp ? new Date(exp).toLocaleString() : '-';
     } catch (err) {
         receiverMeta = null;
         rxFilename.textContent = '-';
         rxFilesize.textContent = '-';
+        rxCipherType.textContent = '-';
         rxExpiry.textContent = '-';
         setStatus(downloadStatus, err.message || 'Failed to load file metadata.', 'error');
     }
@@ -334,7 +448,7 @@ function initSenderMode() {
     receiverPanel.classList.remove('active');
     modeTag.textContent = 'Sender Mode';
     title.textContent = 'Secure AES File Transfer';
-    subtitle.textContent = 'Encrypt in your browser, upload ciphertext, and share a temporary link.';
+    subtitle.textContent = 'Choose AES type, encrypt in browser, upload ciphertext, and share a temporary link.';
 }
 
 fileInput.addEventListener('change', () => {
@@ -367,6 +481,10 @@ senderPassword.addEventListener('input', () => {
     updateSenderReady();
 });
 
+senderCipherType.addEventListener('change', () => {
+    updateSenderReady();
+});
+
 copyBtn.addEventListener('click', async () => {
     const link = shareLink.textContent.trim();
     if (!link) return;
@@ -383,6 +501,8 @@ copyBtn.addEventListener('click', async () => {
 encryptUploadBtn.addEventListener('click', async () => {
     if (!selectedFile) return;
     const password = senderPassword.value;
+    const cipherType = senderCipherType.value;
+
     if (!password) {
         setStatus(uploadStatus, 'Password is required.', 'warn');
         return;
@@ -392,15 +512,16 @@ encryptUploadBtn.addEventListener('click', async () => {
     setProgress(uploadBar, 0);
     shareArea.style.display = 'none';
     qr.innerHTML = '';
-    setStatus(uploadStatus, 'Encrypting file in browser...', '');
+    setStatus(uploadStatus, `Encrypting file with ${cipherType}...`, '');
 
     try {
-        const encrypted = await encryptFile(selectedFile, password);
+        const encrypted = await encryptFile(selectedFile, password, cipherType);
         setStatus(uploadStatus, 'Uploading encrypted blob...', '');
 
         const meta = {
             originalName: selectedFile.name,
-            fileSize: selectedFile.size
+            fileSize: selectedFile.size,
+            cipherType
         };
         const response = await uploadEncrypted(encrypted, meta);
 
@@ -408,7 +529,7 @@ encryptUploadBtn.addEventListener('click', async () => {
         shareLink.textContent = link;
         shareArea.style.display = 'block';
         setProgress(uploadBar, 1);
-        setStatus(uploadStatus, 'Upload complete. Share this link securely.', 'ok');
+        setStatus(uploadStatus, 'Upload complete. Share link and password securely.', 'ok');
 
         await renderQr(link);
 
@@ -433,6 +554,8 @@ downloadDecryptBtn.addEventListener('click', async () => {
     }
 
     const password = receiverPassword.value;
+    const selectedCipherType = receiverCipherType.value;
+
     if (!password) {
         setStatus(downloadStatus, 'Password is required.', 'warn');
         return;
@@ -447,19 +570,19 @@ downloadDecryptBtn.addEventListener('click', async () => {
             setProgress(downloadBar, p);
         });
 
-        setStatus(downloadStatus, 'Decrypting in browser...', '');
-        const plain = await decryptFile(data, password);
+        setStatus(downloadStatus, `Decrypting with ${selectedCipherType}...`, '');
+        const plain = await decryptFile(data, password, selectedCipherType);
         const filename = receiverMeta?.originalName || readOriginalNameFromHeaders(headers);
         triggerDownload(plain, filename);
         setStatus(downloadStatus, 'Download ready and decrypted.', 'ok');
     } catch (err) {
-        const msg = err.message || 'Download/decrypt failed.';
+        const msg = err.message || '';
         if (/expired|not found/i.test(msg)) {
             setStatus(downloadStatus, 'Link expired or file missing.', 'error');
-        } else if (/tampered|wrong password/i.test(msg)) {
-            setStatus(downloadStatus, 'Wrong password or tampered file.', 'error');
+        } else if (/Unable to decrypt file/i.test(msg)) {
+            setStatus(downloadStatus, GENERIC_DECRYPT_ERROR, 'error');
         } else {
-            setStatus(downloadStatus, msg, 'error');
+            setStatus(downloadStatus, 'Unable to decrypt file. Check encryption type and password.', 'error');
         }
     } finally {
         downloadDecryptBtn.disabled = false;

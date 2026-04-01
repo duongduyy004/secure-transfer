@@ -120,6 +120,7 @@ async function resolveActiveShare(shareId) {
 function setDownloadHeaders(res, shareId, meta, stat) {
     const originalName = String(meta.originalName || 'download.bin');
     const encodedOriginalName = encodeURIComponent(originalName);
+    const cipherType = String(meta.cipherType || '');
 
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Length', stat.size);
@@ -128,6 +129,9 @@ function setDownloadHeaders(res, shareId, meta, stat) {
     res.setHeader('X-Original-Name', encodedOriginalName);
     res.setHeader('X-Original-Name-Encoded', encodedOriginalName);
     res.setHeader('X-File-Size', String(meta.fileSize || 0));
+    if (cipherType) {
+        res.setHeader('X-Cipher-Type', cipherType);
+    }
     res.setHeader('X-Expires-At', meta.expiresAt);
 }
 

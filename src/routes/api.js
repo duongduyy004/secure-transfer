@@ -14,6 +14,7 @@ const {
 } = require('../services/shareService');
 
 const router = express.Router();
+const ALLOWED_CIPHER_TYPES = new Set(['AES-128', 'AES-192', 'AES-256']);
 
 router.post('/upload', uploadLimiter, upload.single('encfile'), async (req, res) => {
     try {
@@ -36,10 +37,16 @@ router.post('/upload', uploadLimiter, upload.single('encfile'), async (req, res)
 
         const originalName = cleanFilename(parsedMeta.originalName);
         const fileSize = Number(parsedMeta.fileSize);
+        const cipherType = String(parsedMeta.cipherType || '').trim();
 
         if (!Number.isFinite(fileSize) || fileSize < 0) {
             await removeIfExists(req.file.path);
             return res.status(400).json({ error: 'Invalid meta.fileSize value.' });
+        }
+
+        if (!ALLOWED_CIPHER_TYPES.has(cipherType)) {
+            await removeIfExists(req.file.path);
+            return res.status(400).json({ error: 'Invalid meta.cipherType value.' });
         }
 
         const shareId = path.basename(req.file.filename, '.enc');
@@ -49,6 +56,7 @@ router.post('/upload', uploadLimiter, upload.single('encfile'), async (req, res)
             shareId,
             originalName,
             fileSize,
+            cipherType,
             expiresAt,
             createdAt: new Date().toISOString()
         };

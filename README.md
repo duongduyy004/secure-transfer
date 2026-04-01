@@ -1,6 +1,6 @@
 # Secure Transfer
 
-Production-style encrypted file transfer with client-side AES-256-GCM encryption.
+Production-style encrypted file transfer with client-side AES-GCM encryption (AES-128/AES-192/AES-256).
 
 ## What It Does
 
@@ -37,12 +37,12 @@ secure-transfer/
 Client-side encrypted payload format:
 
 ```text
-[4b magic][16b salt][12b iv][ciphertext+tag]
+[4b magic][1b cipher marker][16b salt][12b iv][ciphertext+tag]
 ```
 
-- Magic: `AES1`
-- Key derivation: PBKDF2 (SHA-256, 310000 iterations)
-- Symmetric cipher: AES-256-GCM
+- Magic: `STR2`
+- Key derivation: PBKDF2 (SHA-256, 210000 iterations)
+- Symmetric cipher: AES-GCM (selected by user: AES-128/AES-192/AES-256)
 
 ## API
 
@@ -51,7 +51,7 @@ Client-side encrypted payload format:
 - `multipart/form-data`
 - Fields:
   - `encfile`: encrypted binary blob (`.enc`)
-  - `meta`: JSON string: `{ "originalName": "...", "fileSize": 12345 }`
+  - `meta`: JSON string: `{ "originalName": "...", "fileSize": 12345, "cipherType": "AES-256" }`
 - Stores file as `./uploads/<uuid>.enc`
 - Stores metadata as `./uploads/<uuid>.json`
 - Returns:
@@ -67,6 +67,7 @@ Client-side encrypted payload format:
   - `Content-Disposition: attachment; filename="<uuid>.enc"`
   - `X-Original-Name`
   - `X-File-Size`
+  - `X-Cipher-Type`
   - `X-Expires-At`
 - Returns `404` when missing/expired
 
@@ -107,7 +108,7 @@ npm start
 
 Server runs at:
 
-- `http://localhost:3000`
+- `http://localhost:4000`
 
 ### 3. (Optional) Secure cleanup endpoint
 
@@ -121,7 +122,7 @@ npm start
 Then call cleanup:
 
 ```bash
-curl -X DELETE http://localhost:3000/api/cleanup \
+curl -X DELETE http://localhost:4000/api/cleanup \
   -H "x-internal-token: your-random-secret"
 ```
 
@@ -130,17 +131,19 @@ curl -X DELETE http://localhost:3000/api/cleanup \
 ### Sender flow (`/`)
 
 1. Select file or drag-drop
-2. Enter password (strength indicator shown)
-3. Click **Encrypt & Upload**
-4. Copy generated link (`/receive/<shareId>`) or scan QR code
-5. Share password via separate secure channel
+2. Choose encryption type (AES-128/AES-192/AES-256)
+3. Enter password (strength indicator shown)
+4. Click **Encrypt & Upload**
+5. Copy generated link (`/receive/<shareId>`) or scan QR code
+6. Share password via separate secure channel
 
 ### Receiver flow (`/receive/<shareId>`)
 
 1. Open link
-2. Enter password
-3. Click **Download & Decrypt**
-4. Browser decrypts and downloads original file name
+2. Choose decryption type (must match sender type)
+3. Enter password (must match sender password)
+4. Click **Download & Decrypt**
+5. Browser decrypts and downloads original file name
 
 ## Ngrok (Share Publicly)
 
@@ -156,10 +159,10 @@ ngrok config add-authtoken <YOUR_AUTHTOKEN>
 
 ### 3. Expose local app
 
-Keep your app running on `3000`, then:
+Keep your app running on `4000`, then:
 
 ```bash
-ngrok http 3000
+ngrok http 4000
 ```
 
 ngrok prints a public HTTPS URL (example):
