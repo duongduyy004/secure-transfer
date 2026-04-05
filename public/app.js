@@ -22,7 +22,6 @@ const qr = document.getElementById('qr');
 const rxShareId = document.getElementById('rxShareId');
 const rxFilename = document.getElementById('rxFilename');
 const rxFilesize = document.getElementById('rxFilesize');
-const rxExpiry = document.getElementById('rxExpiry');
 const receiverCipherType = document.getElementById('receiverCipherType');
 const receiverPassword = document.getElementById('receiverPassword');
 const downloadDecryptBtn = document.getElementById('downloadDecryptBtn');
@@ -379,12 +378,10 @@ async function initReceiverMode(shareId) {
         receiverMeta = { originalName: name, fileSize: size, expiresAt: exp, cipherType };
         rxFilename.textContent = name;
         rxFilesize.textContent = formatBytes(size);
-        rxExpiry.textContent = exp ? new Date(exp).toLocaleString() : '-';
     } catch (err) {
         receiverMeta = null;
         rxFilename.textContent = '-';
         rxFilesize.textContent = '-';
-        rxExpiry.textContent = '-';
         setStatus(downloadStatus, err.message || 'Failed to load file metadata.', 'error');
     }
 }
