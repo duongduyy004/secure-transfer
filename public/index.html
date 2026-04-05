@@ -104,12 +104,16 @@
             <section class="card">
                 <h2 style="margin-top:0;">Encryption format</h2>
                 <p class="sub" style="margin:0; font-family: var(--mono);">
-                    [4b magic][1b cipher marker][16b salt][12b iv][ciphertext+tag]<br />
-                    PBKDF2-SHA256 -> AES-GCM (128/192/256)
+                    [4b magic][1b cipher marker][16b salt][16b iv][ciphertext]<br />
+                    Pure JS AES-CBC (128/192/256)
                 </p>
             </section>
         </aside>
     </main>
+    <script src="/aes.js" defer></script>
+    <script src="/aes-128.js" defer></script>
+    <script src="/aes-192.js" defer></script>
+    <script src="/aes-256.js" defer></script>
     <script src="/app.js" defer></script>
 </body>
 

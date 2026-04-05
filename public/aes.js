@@ -58,6 +58,9 @@ function buildInvSBox(sBox) {
 // ============================================================
 function keyExpansion(keyBytes) {
     const key = new Uint8Array(keyBytes);
+    if (key.length !== 16 && key.length !== 24 && key.length !== 32) {
+        throw new Error('AES key must be 16, 24, or 32 bytes long');
+    }
     const Nk = key.length / 4;
     const Nr = Nk === 4 ? 10 : Nk === 6 ? 12 : 14;
     const sBox = buildSBox();
@@ -247,6 +250,9 @@ function pkcs7Unpad(data) {
 }
 
 function cbcEncrypt(dataBytes, keyBytes, iv16) {
+    if (!(iv16 instanceof Uint8Array) || iv16.length !== 16) {
+        throw new Error('CBC IV must be 16 bytes');
+    }
     const { expanded, Nr, sBox } = keyExpansion(keyBytes);
     const padded = pkcs7Pad(new Uint8Array(dataBytes));
     const out = new Uint8Array(padded.length);
@@ -262,6 +268,9 @@ function cbcEncrypt(dataBytes, keyBytes, iv16) {
 }
 
 function cbcDecrypt(dataBytes, keyBytes, iv16) {
+    if (!(iv16 instanceof Uint8Array) || iv16.length !== 16) {
+        throw new Error('CBC IV must be 16 bytes');
+    }
     const data = new Uint8Array(dataBytes);
     if (data.length === 0 || data.length % 16 !== 0) throw new Error('Invalid ciphertext length');
     const { expanded, Nr, invSBox } = keyExpansion(keyBytes);

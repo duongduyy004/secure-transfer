@@ -31,14 +31,13 @@ const downloadStatus = document.getElementById('downloadStatus');
 
 const MAGIC = new Uint8Array([0x53, 0x54, 0x52, 0x32]); // STR2
 const SALT_SIZE = 16;
-const IV_SIZE = 12;
-const PBKDF2_ITERATIONS = 210000;
+const IV_SIZE = 16;
 const GENERIC_DECRYPT_ERROR = 'Unable to decrypt file. Check encryption type and password.';
 
 const CIPHER_CONFIGS = {
-    'AES-128': { bits: 128, code: 1 },
-    'AES-192': { bits: 192, code: 2 },
-    'AES-256': { bits: 256, code: 3 }
+    'AES-128': { bits: 128, code: 1, moduleName: 'PureAES128' },
+    'AES-192': { bits: 192, code: 2, moduleName: 'PureAES192' },
+    'AES-256': { bits: 256, code: 3, moduleName: 'PureAES256' }
 };
 
 const CIPHER_BY_CODE = {
@@ -91,10 +90,11 @@ function updateSenderReady() {
     encryptUploadBtn.disabled = !(selectedFile && senderPassword.value.length > 0);
 }
 
-function ensureCryptoSupport() {
-    if (!(window.crypto && window.crypto.subtle)) {
-        throw new Error('Web Crypto API is not available in this browser.');
+function randomBytes(size) {
+    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+        return window.crypto.getRandomValues(new Uint8Array(size));
     }
+    return window.SimpleAES.randomBytes(size);
 }
 
 function getCipherConfig(cipherType) {
@@ -103,6 +103,15 @@ function getCipherConfig(cipherType) {
         throw new Error(`Unsupported encryption type: ${cipherType}`);
     }
     return cfg;
+}
+
+function getCipherModule(cipherType) {
+    const cfg = getCipherConfig(cipherType);
+    const cipherModule = window[cfg.moduleName];
+    if (!cipherModule || typeof cipherModule.encrypt !== 'function' || typeof cipherModule.decrypt !== 'function') {
+        throw new Error(`${cipherType} module is not loaded.`);
+    }
+    return cipherModule;
 }
 
 function getCipherTypeByCode(code) {
@@ -138,59 +147,25 @@ function readCipherTypeFromPayload(bytes) {
     return cipherType;
 }
 
-async function deriveAesKey(password, salt, bits, usage) {
-    const baseKey = await window.crypto.subtle.importKey(
-        'raw',
-        new TextEncoder().encode(password),
-        'PBKDF2',
-        false,
-        ['deriveKey']
-    );
-
-    return window.crypto.subtle.deriveKey(
-        {
-            name: 'PBKDF2',
-            salt,
-            iterations: PBKDF2_ITERATIONS,
-            hash: 'SHA-256'
-        },
-        baseKey,
-        {
-            name: 'AES-GCM',
-            length: bits
-        },
-        false,
-        [usage]
-    );
-}
-
 async function encryptFile(file, password, cipherType) {
-    ensureCryptoSupport();
-    const { bits, code } = getCipherConfig(cipherType);
+    const { code } = getCipherConfig(cipherType);
+    const cipherModule = getCipherModule(cipherType);
 
     const plain = new Uint8Array(await file.arrayBuffer());
-    const salt = window.crypto.getRandomValues(new Uint8Array(SALT_SIZE));
-    const iv = window.crypto.getRandomValues(new Uint8Array(IV_SIZE));
-    const key = await deriveAesKey(password, salt, bits, 'encrypt');
-
-    const cipherBuffer = await window.crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv },
-        key,
-        plain
-    );
+    const salt = randomBytes(SALT_SIZE);
+    const iv = randomBytes(IV_SIZE);
+    const cipherBytes = cipherModule.encrypt(plain, password, salt, iv);
 
     return concatBytes([
         MAGIC,
         new Uint8Array([code]),
         salt,
         iv,
-        new Uint8Array(cipherBuffer)
+        new Uint8Array(cipherBytes)
     ]);
 }
 
 async function decryptFile(encBuffer, password, selectedCipherType) {
-    ensureCryptoSupport();
-
     const bytes = new Uint8Array(encBuffer);
     const payloadCipherType = readCipherTypeFromPayload(bytes);
 
@@ -198,7 +173,7 @@ async function decryptFile(encBuffer, password, selectedCipherType) {
         throw new Error(GENERIC_DECRYPT_ERROR);
     }
 
-    const { bits } = getCipherConfig(selectedCipherType);
+    const cipherModule = getCipherModule(selectedCipherType);
     const offsetCipherCode = MAGIC.length;
     const offsetSalt = offsetCipherCode + 1;
     const offsetIv = offsetSalt + SALT_SIZE;
@@ -209,13 +184,7 @@ async function decryptFile(encBuffer, password, selectedCipherType) {
     const ciphertext = bytes.slice(offsetCiphertext);
 
     try {
-        const key = await deriveAesKey(password, salt, bits, 'decrypt');
-        const plainBuffer = await window.crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv },
-            key,
-            ciphertext
-        );
-        return new Uint8Array(plainBuffer);
+        return cipherModule.decrypt(ciphertext, password, salt, iv);
     } catch {
         throw new Error(GENERIC_DECRYPT_ERROR);
     }

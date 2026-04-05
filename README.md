@@ -1,6 +1,6 @@
 # Secure Transfer
 
-Production-style encrypted file transfer with client-side AES-GCM encryption (AES-128/AES-192/AES-256).
+Production-style encrypted file transfer with client-side pure-JS AES encryption (AES-128/AES-192/AES-256).
 
 ## What It Does
 
@@ -13,7 +13,7 @@ Production-style encrypted file transfer with client-side AES-GCM encryption (AE
 ## Tech Stack
 
 - Backend: Node.js, Express, Multer, express-rate-limit
-- Frontend: Vanilla JS + Web Crypto API
+- Frontend: Vanilla JS + pure-JS AES implementation
 - Storage: Local disk `./uploads/` with UUID filenames
 - No database
 
@@ -37,12 +37,11 @@ secure-transfer/
 Client-side encrypted payload format:
 
 ```text
-[4b magic][1b cipher marker][16b salt][12b iv][ciphertext+tag]
+[4b magic][1b cipher marker][16b salt][16b iv][ciphertext]
 ```
 
 - Magic: `STR2`
-- Key derivation: PBKDF2 (SHA-256, 210000 iterations)
-- Symmetric cipher: AES-GCM (selected by user: AES-128/AES-192/AES-256)
+- Symmetric cipher: pure-JS AES-CBC (selected by user: AES-128/AES-192/AES-256)
 
 ## API
 
