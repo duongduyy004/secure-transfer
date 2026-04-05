@@ -18,12 +18,10 @@ const shareArea = document.getElementById('shareArea');
 const shareLink = document.getElementById('shareLink');
 const copyBtn = document.getElementById('copyBtn');
 const qr = document.getElementById('qr');
-const expiryTimer = document.getElementById('expiryTimer');
 
 const rxShareId = document.getElementById('rxShareId');
 const rxFilename = document.getElementById('rxFilename');
 const rxFilesize = document.getElementById('rxFilesize');
-const rxCipherType = document.getElementById('rxCipherType');
 const rxExpiry = document.getElementById('rxExpiry');
 const receiverCipherType = document.getElementById('receiverCipherType');
 const receiverPassword = document.getElementById('receiverPassword');
@@ -223,29 +221,6 @@ async function decryptFile(encBuffer, password, selectedCipherType) {
     }
 }
 
-function updateCountdown(expiresAtIso) {
-    if (currentExpiryInterval) {
-        clearInterval(currentExpiryInterval);
-    }
-
-    const tick = () => {
-        const remain = new Date(expiresAtIso).getTime() - Date.now();
-        if (remain <= 0) {
-            expiryTimer.textContent = 'Expired';
-            clearInterval(currentExpiryInterval);
-            currentExpiryInterval = null;
-            return;
-        }
-        const hours = Math.floor(remain / 3600000);
-        const mins = Math.floor((remain % 3600000) / 60000);
-        const secs = Math.floor((remain % 60000) / 1000);
-        expiryTimer.textContent = `Expires in ${hours}h ${mins}m ${secs}s`;
-    };
-
-    tick();
-    currentExpiryInterval = setInterval(tick, 1000);
-}
-
 function setSelectedFile(file) {
     selectedFile = file;
     if (file) {
@@ -435,13 +410,11 @@ async function initReceiverMode(shareId) {
         receiverMeta = { originalName: name, fileSize: size, expiresAt: exp, cipherType };
         rxFilename.textContent = name;
         rxFilesize.textContent = formatBytes(size);
-        rxCipherType.textContent = cipherType || '-';
         rxExpiry.textContent = exp ? new Date(exp).toLocaleString() : '-';
     } catch (err) {
         receiverMeta = null;
         rxFilename.textContent = '-';
         rxFilesize.textContent = '-';
-        rxCipherType.textContent = '-';
         rxExpiry.textContent = '-';
         setStatus(downloadStatus, err.message || 'Failed to load file metadata.', 'error');
     }
@@ -537,9 +510,6 @@ encryptUploadBtn.addEventListener('click', async () => {
 
         await renderQr(link);
 
-        if (response.expiresAt) {
-            updateCountdown(response.expiresAt);
-        }
     } catch (err) {
         setStatus(uploadStatus, err.message || 'Encrypt/upload failed.', 'error');
         setProgress(uploadBar, 0);
