@@ -371,10 +371,6 @@ async function initReceiverMode(shareId) {
         const exp = headResp.headers.get('x-expires-at');
         const cipherType = readCipherTypeFromHeaders(headResp.headers);
 
-        if (cipherType) {
-            receiverCipherType.value = cipherType;
-        }
-
         receiverMeta = { originalName: name, fileSize: size, expiresAt: exp, cipherType };
         rxFilename.textContent = name;
         rxFilesize.textContent = formatBytes(size);
